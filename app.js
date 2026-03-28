@@ -698,7 +698,7 @@ function editName() {
 
 // ===== INIT =====
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/nicothin/sw.js').catch(() => {});
 }
 initOnboarding();
 showSplash();
