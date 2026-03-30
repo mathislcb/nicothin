@@ -7,6 +7,91 @@ const DB = {
   set: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
 };
 
+// ===== PLANS =====
+const CODES = {
+  premium: ['NICOTHIN-PREMIUM', 'PREM2024', 'NICOTHIN2025'],
+  pro: ['NICOTHIN-PRO', 'PRO2024', 'NICOTHIN-PRO2025'],
+};
+
+function getPlan() {
+  return DB.get('userPlan', 'free');
+}
+
+function setPlan(plan) {
+  DB.set('userPlan', plan);
+}
+
+function isPremium() {
+  const p = getPlan();
+  return p === 'premium' || p === 'pro';
+}
+
+function isPro() {
+  return getPlan() === 'pro';
+}
+
+function openPlanModal() {
+  const currentPlan = getPlan();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-overlay active" id="modal-plan">
+      <div class="modal">
+        <div class="modal-title">Abonnements Nicothin</div>
+        <div style="text-align:center;margin-bottom:16px">
+          <span style="background:${currentPlan==='pro'?'#FF7043':currentPlan==='premium'?'#5BB8F5':'#9E9E9E'};
+            color:white;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700">
+            Plan actuel : ${currentPlan==='pro'?'Pro':currentPlan==='premium'?'Premium':'Gratuit'}
+          </span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+          <div style="background:#E8F4FD;border-radius:14px;padding:14px;
+            border:2px solid ${currentPlan==='premium'?'#5BB8F5':'transparent'}">
+            <div style="font-weight:700;color:#5BB8F5;font-size:15px">⭐ Premium</div>
+            <div style="font-size:12px;color:#9E9E9E;margin-top:4px">
+              Statistiques avancées • Historique illimité • Sans pub
+            </div>
+          </div>
+          <div style="background:rgba(255,112,67,0.08);border-radius:14px;padding:14px;
+            border:2px solid ${currentPlan==='pro'?'#FF7043':'transparent'}">
+            <div style="font-weight:700;color:#FF7043;font-size:15px">🔥 Pro</div>
+            <div style="font-size:12px;color:#9E9E9E;margin-top:4px">
+              Tout Premium • Tests respiratoires • Objectif • Évolution • Comparaison
+            </div>
+          </div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">
+          🔑 Entrez votre code d'accès :
+        </div>
+        <input type="text" id="plan-code" placeholder="Ex: NICOTHIN-PREMIUM"
+          class="name-input" style="width:100%;text-transform:uppercase;letter-spacing:1px">
+        <div id="plan-msg" style="font-size:12px;margin-top:8px;text-align:center;min-height:18px"></div>
+        <div class="modal-btns" style="margin-top:12px">
+          <button class="btn-cancel" onclick="closeModal('modal-plan')">FERMER</button>
+          <button class="btn-validate" onclick="validateCode()">ACTIVER</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function validateCode() {
+  const code = $('plan-code').value.trim().toUpperCase();
+  const msg = $('plan-msg');
+  if (CODES.pro.includes(code)) {
+    setPlan('pro');
+    msg.style.color = '#4CAF50';
+    msg.textContent = '✅ Plan Pro activé avec succès !';
+    setTimeout(() => { closeModal('modal-plan'); renderProfile(); }, 1500);
+  } else if (CODES.premium.includes(code)) {
+    setPlan('premium');
+    msg.style.color = '#5BB8F5';
+    msg.textContent = '✅ Plan Premium activé avec succès !';
+    setTimeout(() => { closeModal('modal-plan'); renderProfile(); }, 1500);
+  } else {
+    msg.style.color = '#E53935';
+    msg.textContent = '❌ Code invalide. Vérifiez votre code.';
+  }
+}
+
 // ===== APP STATE =====
 const state = {
   currentScreen: 'home',
@@ -14,6 +99,7 @@ const state = {
   userName: DB.get('userName', 'Utilisateur'),
   onboardingDone: DB.get('onboardingDone', false),
   lastSmokeDate: DB.get('lastSmokeDate', null),
+  lastSeenGradeWeek: DB.get('lastSeenGradeWeek', null),
   entries: DB.get('entries', []),
 };
 
@@ -78,9 +164,6 @@ function showSplash() {
       showApp();
     } else {
       $('onboarding').classList.add('active');
-      // Pré-rempli la date d'aujourd'hui
-      const input = $('onboarding-last-smoke');
-      if (input) input.value = today();
     }
   }, 2200);
 }
@@ -107,7 +190,6 @@ function nextSlide() {
   if (currentSlide === 3) {
     $('onboarding-next').textContent = 'Commencer';
     $('onboarding-skip').style.display = 'none';
-    // Pré-rempli la date d'aujourd'hui
     const input = $('onboarding-last-smoke');
     if (input) input.value = today();
   }
@@ -257,7 +339,6 @@ function saveCigarette() {
   const count = parseFloat(slider.value);
   state.entries.push({ id: uid(), date: state.selectedDay, cigarettes: count, puffMg: 0 });
   DB.set('entries', state.entries);
-  // Remet le compteur non-fumeur à la date sélectionnée
   state.lastSmokeDate = state.selectedDay;
   DB.set('lastSmokeDate', state.lastSmokeDate);
   closeModal('modal-cig');
@@ -310,7 +391,6 @@ function savePuff() {
   const mg = rate * volumePerPuff * consumed;
   state.entries.push({ id: uid(), date: state.selectedDay, cigarettes: 0, puffMg: mg });
   DB.set('entries', state.entries);
-  // Remet le compteur non-fumeur à la date sélectionnée
   state.lastSmokeDate = state.selectedDay;
   DB.set('lastSmokeDate', state.lastSmokeDate);
   closeModal('modal-puff');
@@ -363,7 +443,6 @@ function deleteEntry(id) {
   if (!confirm('Supprimer cette entrée ?')) return;
   state.entries = state.entries.filter(e => e.id !== id);
   DB.set('entries', state.entries);
-  // Recalcule la dernière date de consommation
   const allDates = [...state.entries.map(e => e.date)].sort();
   const lastDate = allDates[allDates.length - 1];
   if (lastDate) {
@@ -379,6 +458,27 @@ function deleteEntry(id) {
 function closeModal(id) {
   const el = $(id);
   if (el) el.remove();
+}
+
+// ===== CONFETTIS =====
+function launchConfetti() {
+  const colors = ['#5BB8F5','#4CAF50','#FFB300','#FF7043','#E53935','#7B61FF'];
+  for (let i = 0; i < 50; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.cssText = `
+      left: ${Math.random() * 100}vw;
+      top: -10px;
+      background: ${colors[Math.floor(Math.random() * colors.length)]};
+      width: ${6 + Math.random() * 8}px;
+      height: ${6 + Math.random() * 8}px;
+      border-radius: ${Math.random() > 0.5 ? '50%' : '2px'};
+      animation-duration: ${1.5 + Math.random() * 2}s;
+      animation-delay: ${Math.random() * 0.8}s;
+    `;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
 }
 
 // ===== RANKING SCREEN =====
@@ -412,6 +512,10 @@ function renderRanking() {
     D: '201 — 350 tox', E: '351 — 500 tox', F: '500+ tox'
   };
 
+  // Nouveau grade à révéler ?
+  const currentWeekKey = prevMonday.toISOString().split('T')[0];
+  const isNewGrade = !hasNoPrevData && state.lastSeenGradeWeek !== currentWeekKey;
+
   $('screen-ranking').innerHTML = `
     <div class="page-header">
       <div class="page-title">Classement hebdomadaire</div>
@@ -433,7 +537,7 @@ function renderRanking() {
       </div>
     </div>
 
-    <!-- Grade ou message pas encore classé -->
+    <!-- Grade -->
     ${hasNoPrevData
       ? `<div class="card" style="margin-top:12px;text-align:center;padding:28px 20px">
           <div style="font-size:52px">🏅</div>
@@ -446,14 +550,15 @@ function renderRanking() {
           </div>
         </div>`
       : `<div class="card" style="margin-top:12px;background:${scoreColor}18;
-            border:1.5px solid ${scoreColor}40">
+            border:1.5px solid ${scoreColor}40;overflow:hidden">
           <div style="display:flex;align-items:center;gap:16px">
-            <div style="width:80px;height:80px;border-radius:18px;background:${scoreColor};
+            <div class="${isNewGrade ? 'grade-reveal' : ''}"
+              style="width:80px;height:80px;border-radius:18px;background:${scoreColor};
               display:flex;align-items:center;justify-content:center;
               box-shadow:0 6px 16px ${scoreColor}60;flex-shrink:0">
               <span style="font-size:42px;font-weight:700;color:white">${score}</span>
             </div>
-            <div>
+            <div class="${isNewGrade ? 'grade-info' : ''}">
               <div style="font-size:20px;font-weight:700;color:${scoreColor}">GRADE ${score}</div>
               <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
                 ${totalTox.toFixed(1)} tox cette semaine
@@ -484,7 +589,7 @@ function renderRanking() {
           </div>
           <div class="card">
             <div style="display:flex;align-items:flex-end;justify-content:space-around;height:120px">
-              ${dailyNic.map((v, i) => {
+              ${dailyNic.map(v => {
                 const h = maxNic > 0 ? Math.max((v / maxNic * 100), 4) : 4;
                 const c = getNicColor(v);
                 return `
@@ -506,7 +611,7 @@ function renderRanking() {
         </div>`
     }
 
-    <!-- Grades toujours affichés -->
+    <!-- Grades -->
     <div style="padding:0 20px;margin-top:20px;margin-bottom:32px">
       <div style="font-size:18px;font-weight:700;margin-bottom:12px">Les grades :</div>
       ${['A','B','C','D','E','F'].map(g => {
@@ -530,6 +635,13 @@ function renderRanking() {
   `;
 
   startCountdown(nextMonday);
+
+  // Lance confettis si nouveau grade
+  if (isNewGrade) {
+    setTimeout(() => launchConfetti(), 400);
+    state.lastSeenGradeWeek = currentWeekKey;
+    DB.set('lastSeenGradeWeek', currentWeekKey);
+  }
 }
 
 function startCountdown(nextMonday) {
@@ -615,6 +727,7 @@ function getRisks(score) {
 function renderProfile() {
   const totalNic = state.entries.reduce((s, e) => s + (e.cigarettes*0.7) + (e.puffMg||0), 0);
   const totalEntries = state.entries.length;
+  const currentPlan = getPlan();
 
   let streak = 0;
   for (let i = 0; i < 365; i++) {
@@ -625,7 +738,6 @@ function renderProfile() {
     else if (i > 0) break;
   }
 
-  // Non-fumeur depuis — basé sur lastSmokeDate
   let years = 0, months = 0, days = 0;
   if (state.lastSmokeDate) {
     const diff = Math.floor(
@@ -641,17 +753,23 @@ function renderProfile() {
       <div class="page-title">Profil</div>
     </div>
 
+    <!-- Bouton abonnement -->
     <div style="margin:16px 20px 0;background:linear-gradient(135deg,#5BB8F5,#FF7043);
       border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px;cursor:pointer"
-      onclick="alert('Abonnements — bientôt !')">
-      <span style="font-size:22px">⭐</span>
+      onclick="openPlanModal()">
+      <span style="font-size:22px">${currentPlan==='pro'?'🔥':currentPlan==='premium'?'⭐':'🔓'}</span>
       <div style="flex:1">
-        <div style="font-weight:700;color:white;font-size:15px">Passer à Premium ou Pro</div>
-        <div style="color:rgba(255,255,255,0.8);font-size:12px">Débloquez toutes les fonctionnalités</div>
+        <div style="font-weight:700;color:white;font-size:15px">
+          ${currentPlan==='pro'?'Plan Pro actif ✓':currentPlan==='premium'?'Plan Premium actif ✓':'Passer à Premium ou Pro'}
+        </div>
+        <div style="color:rgba(255,255,255,0.8);font-size:12px">
+          ${currentPlan==='free'?'Entrez votre code d\'accès':'Gérer mon abonnement'}
+        </div>
       </div>
       <span style="color:rgba(255,255,255,0.7);font-size:18px">›</span>
     </div>
 
+    <!-- Avatar + nom -->
     <div style="display:flex;flex-direction:column;align-items:center;margin-top:24px;gap:10px">
       <div style="width:80px;height:80px;border-radius:40px;background:var(--card-bg);
         display:flex;align-items:center;justify-content:center;font-size:40px">👤</div>
@@ -659,8 +777,14 @@ function renderProfile() {
         <span id="profile-name" style="font-size:18px;font-weight:700">${state.userName}</span>
         <span style="font-size:14px;color:var(--blue)">✏️</span>
       </div>
+      ${currentPlan !== 'free' ? `
+        <span style="background:${currentPlan==='pro'?'#FF7043':'#5BB8F5'};color:white;
+          padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700">
+          ${currentPlan==='pro'?'🔥 Pro':'⭐ Premium'}
+        </span>` : ''}
     </div>
 
+    <!-- 3 badges -->
     <div style="display:flex;gap:12px;padding:0 20px;margin-top:20px">
       <div style="flex:1;background:rgba(255,112,67,0.1);border-radius:16px;padding:14px;
         border:1px solid rgba(255,112,67,0.2);text-align:center">
@@ -682,6 +806,7 @@ function renderProfile() {
       </div>
     </div>
 
+    <!-- Non-fumeur depuis -->
     <div class="card" style="margin-top:16px">
       <div style="text-align:center;font-size:14px;font-weight:600;margin-bottom:16px">
         Non-fumeur depuis
@@ -709,7 +834,7 @@ function renderProfile() {
       }
     </div>
 
-    <!-- Modifier la date dernière cigarette -->
+    <!-- Modifier date -->
     <div style="margin:12px 20px 0">
       <button onclick="editLastSmoke()"
         style="width:100%;padding:14px;background:var(--card-bg);border:none;
